@@ -6,6 +6,15 @@
             [clojure.string :refer [index-of last-index-of]])
   (:gen-class))
 
+(defn format-actuation
+  "Format actuation (:steering-angle and :throttle) for transmission to simulator."
+  [actuation]
+  (str "42[\"steer\",{\"steering_angle\":"
+       (:steering-angle actuation)
+       ",\"throttle\":"
+       (:throttle actuation)
+       "}]"))
+
 (defn parse-message
   "Parse message from Udacity's SDC term 2 simulator for the PID project."
   [msg]
@@ -40,7 +49,7 @@
         (println (str (or parsed message))))
       (when parsed
         (let [response (case (:type parsed)
-                         :telemetry "42[\"steer\",{\"steering_angle\":0.0,\"throttle\":0.3}]"
+                         :telemetry (format-actuation {:steering-angle -0.05 :throttle 0.3})
                          :manual    "42[\"manual\",{}]"
                          (throw (Exception. (str "Unrecognized message type " (:type parsed)))))]
             (>! ws-channel response)
