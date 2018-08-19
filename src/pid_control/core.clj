@@ -1,8 +1,7 @@
 (ns pid-control.core
   (:require [chord.http-kit :refer [with-channel wrap-websocket-handler]]
             [org.httpkit.server :refer [run-server]]
-            [clojure.core.async :refer [<! >! put! close! go]]
-            [clojure.core.async :as a]
+            [clojure.core.async :refer [<! >! go-loop chan dropping-buffer]]
             [clojure.data.json :as json]
             [clojure.string :refer [index-of last-index-of]])
   (:gen-class))
@@ -26,8 +25,10 @@
         json-msg))
     nil))
 
+(def delay-millis 100)
+
 (defn handler [{:keys [ws-channel] :as req}]
-  (go
+  (go-loop []
     (let [{:keys [message]} (<! ws-channel)
           telemetry (parse-telemetry message)]
       (if message
@@ -37,7 +38,8 @@
           (>! ws-channel response)
           (println response)))
       ;(>! ws-channel "42[\"manual\",{}]")
-      ;(close! ws-channel)
+      (Thread/sleep delay-millis)
+      (recur)
       )))
 
 (defn -main
@@ -46,7 +48,7 @@
   (println "Starting server")
   (run-server (-> #'handler
                   (wrap-websocket-handler
-                    {:read-ch (a/chan (a/dropping-buffer 10))
+                    {:read-ch (chan (dropping-buffer 10))
                      :format :str}))
               {:port 4567})
   )
