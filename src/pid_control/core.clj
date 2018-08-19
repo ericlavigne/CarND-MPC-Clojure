@@ -6,6 +6,13 @@
             [clojure.string :refer [index-of last-index-of]])
   (:gen-class))
 
+(def steering-pid-parameters
+     {:proportional-factor 0.12
+      :derivative-factor 1.8
+      :integral-factor 0.005})
+
+(def speed 20)
+
 (defn initial-pid
   "Set PID errors using only the first measurement."
   [measured-error]
@@ -65,8 +72,6 @@
 (def pid (atom nil))
 (def previous-milliseconds (atom nil))
 (def actuation-period-milliseconds 50)
-(def steering-pid-parameters {:proportional-factor 0.12 :derivative-factor 1.8 :integral-factor 0.005})
-(def speed 20)
 
 (defn handler
   "Called in response to websocket connection. Handles sending and receiving messages."
