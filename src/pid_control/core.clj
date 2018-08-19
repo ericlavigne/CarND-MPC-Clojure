@@ -7,34 +7,32 @@
   (:gen-class))
 
 (def steering-pid-parameters
-     {:proportional-factor 0.12
-      :derivative-factor 1.8
-      :integral-factor 0.005})
+     {:proportional-factor 0.0   ; TODO: Choose factors that keep the car on the road.
+      :derivative-factor   0.0   ;       Recommended order is proportional, derivative,
+      :integral-factor     0.0}) ;       then integral.
 
-(def speed 20)
+(def speed 20) ; TODO: How fast can you go while still driving smoothly?
 
 (defn initial-pid
   "Set PID errors using only the first measurement."
   [measured-error]
-  {:proportional-error measured-error
-   :derivative-error 0.0
-   :integral-error 0.0})
+  {:proportional-error 0.0   ; TODO: Calculate new proportional error
+   :derivative-error   0.0   ; TODO: Calculate new derivative error
+   :integral-error     0.0}) ; TODO: Calculate new integral error
 
 (defn pid-actuation
   "Use PID to select actuation (such as steering angle)."
   [{:keys [proportional-error derivative-error integral-error] :as pid}
    {:keys [proportional-factor derivative-factor integral-factor] :as pid-parameters}]
-  (- (+ (* proportional-factor proportional-error)
-        (* derivative-factor derivative-error)
-        (* integral-factor integral-error))))
+  0.0) ; TODO: Calculate actuation (steering angle)
 
 (defn update-pid
   "Use new error measurement to update PID errors."
   [{:keys [proportional-error derivative-error integral-error] :as pid}
    measured-error time-passed]
-  {:proportional-error measured-error
-   :derivative-error (/ (- measured-error proportional-error) time-passed)
-   :integral-error (+ integral-error (* measured-error time-passed))})
+  {:proportional-error 0.0 ; TODO: Calculate new proportional error
+   :derivative-error 0.0   ; TODO: Calculate new derivative error
+   :integral-error 0.0})   ; TODO: Calculate new integral error
 
 (defn format-actuation
   "Format actuation (:steering-angle and :throttle) for transmission to simulator."
