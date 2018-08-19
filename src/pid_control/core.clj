@@ -6,13 +6,36 @@
             [clojure.string :refer [index-of last-index-of]])
   (:gen-class))
 
+(defn initial-pid
+  "Set PID errors using only the first measurement."
+  [measured-error]
+  {:proportional-error measured-error
+   :derivative-error 0.0
+   :integral-error 0.0})
+
+(defn pid-actuation
+  "Use PID to select actuation (such as steering angle)."
+  [{:keys [proportional-error derivative-error integral-error] :as pid}
+   {:keys [proportional-factor derivative-factor integral-factor] :as pid-parameters}]
+  (- (+ (* proportional-factor proportional-error)
+        (* derivative-factor derivative-error)
+        (* integral-factor integral-error))))
+
+(defn update-pid
+  "Use new error measurement to update PID errors."
+  [{:keys [proportional-error derivative-error integral-error] :as pid}
+   measured-error time-passed]
+  {:proportional-error measured-error
+   :derivative-error (/ (- measured-error proportional-error) time-passed)
+   :integral-error (+ integral-error (* measured-error time-passed))})
+
 (defn format-actuation
   "Format actuation (:steering-angle and :throttle) for transmission to simulator."
-  [actuation]
+  [{:keys [steering-angle throttle] :as actuation}]
   (str "42[\"steer\",{\"steering_angle\":"
-       (:steering-angle actuation)
+       steering-angle
        ",\"throttle\":"
-       (:throttle actuation)
+       throttle
        "}]"))
 
 (defn parse-message
@@ -39,21 +62,41 @@
         json-msg))
     nil))
 
+(def pid (atom nil))
+(def previous-milliseconds (atom nil))
+(def actuation-period-milliseconds 50)
+(def steering-pid-parameters {:proportional-factor 0.12 :derivative-factor 1.8 :integral-factor 0.005})
+(def speed 20)
+
 (defn handler
   "Called in response to websocket connection. Handles sending and receiving messages."
   [{:keys [ws-channel] :as req}]
   (go-loop []
     (let [{:keys [message]} (<! ws-channel)
-          parsed (parse-message message)]
+          parsed (parse-message message)
+          current-milliseconds (.getTime (java.util.Date.))]
       (if message
         (println (str (or parsed message))))
       (when parsed
-        (let [response (case (:type parsed)
-                         :telemetry (format-actuation {:steering-angle -0.05 :throttle 0.3})
-                         :manual    "42[\"manual\",{}]"
-                         (throw (Exception. (str "Unrecognized message type " (:type parsed)))))]
-            (>! ws-channel response)
-            (println response)))
+        (when (= :telemetry (:type parsed))
+          (when (not @pid)
+            (reset! pid (initial-pid (:cte parsed)))
+            (reset! previous-milliseconds current-milliseconds))
+          (let [milliseconds-elapsed (- current-milliseconds @previous-milliseconds)
+                milliseconds-until-actuation (- actuation-period-milliseconds milliseconds-elapsed)]
+            (when (<= milliseconds-until-actuation 0)
+              (swap! pid update-pid (:cte parsed) (* milliseconds-elapsed 0.001 (max 1.0 (:speed parsed))))
+              (reset! previous-milliseconds current-milliseconds))
+            (when (> milliseconds-until-actuation 0)
+              (Thread/sleep milliseconds-until-actuation))
+            (let [response (format-actuation {:steering-angle (pid-actuation @pid steering-pid-parameters)
+                                              :throttle (if (< (:speed parsed) speed) 1.0 0.0)})]
+              (>! ws-channel response)
+              (when (= current-milliseconds @previous-milliseconds)
+                (println response)))))
+        (when (= :manual (:type parsed))
+          (Thread/sleep actuation-period-milliseconds)
+          (>! ws-channel "42[\"manual\",{}]")))
       (recur))))
 
 (defn -main
