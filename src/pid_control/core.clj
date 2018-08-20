@@ -98,6 +98,7 @@
               (when (= current-milliseconds @previous-milliseconds)
                 (println response)))))
         (when (= :manual (:type parsed))
+          (reset! pid nil)
           (Thread/sleep actuation-period-milliseconds)
           (>! ws-channel "42[\"manual\",{}]")))
       (recur))))
