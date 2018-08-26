@@ -7,10 +7,18 @@
 (deftest parse-message-test
   (testing "Can parse a telemetry message"
     (let [parsed (parse-message (slurp (io/resource "telemetry-message.txt")))]
-      (is (= 0.7598 (:cte parsed)))
-      (is (= 0.2 (:steering-angle parsed)))
-      (is (= 0.5 (:throttle parsed)))
-      (is (= 10.3 (:speed parsed)))))
+      (is (= parsed
+             {:type :telemetry,
+              :ptsx [-32.16173 -43.49173 -61.09 -78.29172 -93.05002 -107.7717],
+              :ptsy [113.361 105.941 92.88499 78.73102 65.34102 50.57938]
+              :x -40.62,
+              :y 108.73,
+              :speed 0,
+              :psi 3.733651,
+              :psi-unity 4.12033,
+              :throttle 0,
+              :steering-angle 0}))))
+              
   (testing "Can skip empty messages"
     (is (= nil (parse-message nil)))
     (is (= nil (parse-message "2"))))

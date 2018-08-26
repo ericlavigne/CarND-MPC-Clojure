@@ -48,6 +48,7 @@
 (defn parse-message
   "Parse message from Udacity's SDC term 2 simulator for the PID project."
   [msg]
+  (println msg)
   (if (and msg
            (> (.length msg) 2)
            (= (subs msg 0 2) "42"))
@@ -59,12 +60,15 @@
         (let [data (get json-msg 1)]
           (if data
             {:type :telemetry
-             :cte (Double/parseDouble (get data "cte"))
-             :steering-angle (Double/parseDouble (get data "steering_angle"))
-             :throttle (Double/parseDouble (get data "throttle"))
-             :speed (Double/parseDouble (get data "speed"))
-             ;:image (get data "image")
-            }
+             :ptsx (get data "ptsx")
+             :ptsy (get data "ptsy")
+             :x (get data "x")
+             :y (get data "y")
+             :speed (get data "speed")
+             :psi (get data "psi")
+             :psi-unity (get data "psi_unity")
+             :steering-angle (get data "steering_angle")
+             :throttle (get data "throttle")}
             {:type :manual}))
         json-msg))
     nil))

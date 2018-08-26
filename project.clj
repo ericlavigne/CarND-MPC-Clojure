@@ -1,4 +1,4 @@
-(defproject pid-control "0.1.0-SNAPSHOT"
+(defproject mpc "0.1.0-SNAPSHOT"
   :description "Clojure version of MPC project from Udacity's self-driving car engineer nanodegree"
   :url "https://github.com/ericlavigne/CarND-MPC-Clojure"
   :license {:name "Eclipse Public License"
