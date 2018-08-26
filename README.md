@@ -1,11 +1,11 @@
-# CarND PID Control
+# CarND Model Predictive Control
 [![Udacity - Self-Driving Car NanoDegree](https://s3.amazonaws.com/udacity-sdc/github/shield-carnd.svg)](http://www.udacity.com/drive)
 
 Self-Driving Car Engineer Nanodegree Program
 
 ---
 
-Clojure version of Udacity's PID controller project from term 2 of the self-driving
+Clojure version of Udacity's MPC project from term 2 of the self-driving
 car engineer nanodegree. This repository is intended to serve as starter code for
 other students who wish to complete the project in Clojure.
 
@@ -37,7 +37,7 @@ or [Vim](https://github.com/tpope/vim-fireplace).
 
 ## Usage
 
-You'll find many TODO comments in src/pid_control/core.clj indicating parts of
+You'll find many TODO comments in src/mpc/core.clj indicating parts of
 the code that you will need to complete. You are encouraged to run the automated
 tests frequently to confirm that your changes work correctly.
 
@@ -45,19 +45,25 @@ tests frequently to confirm that your changes work correctly.
 
 When the code is complete, you can run it with the following command. You should also run
 [Udacity's term 2 simulator](https://github.com/udacity/self-driving-car-sim/releases)
-at the same time and select the "PID Control" project.
+at the same time and select the "MPC Control" project.
 
     $ lein run
 
-Try to choose values for the P, I, and D parameters so that the car drives as smoothly as
-possible. Once the car is driving smoothly, try slowly increasing the car's speed to see
-how high you can go.
+The idea of model predictive control is to describe the problem and desired outcome,
+then let an optimization library find a good solution to that problem. In this case,
+we use the [figurer](https://github.com/ericlavigne/figurer) library to perform the
+optimization. You will need to inform figurer about what kind of outcome you want
+(value function), the available actions and their likelihood of each action (policy
+function), and the mechanics of this problem (prediction function). Start with
+simple versions of each of these functions, then enhance these functions to improve
+your car's steering. For added challenge, see how fast you can go without leaving
+the track. (Over 100 MPH is possible!)
 
 ## Solution
 
 You should complete this project on your own first. After you've completed the project,
 you can review
-[my solution](https://github.com/ericlavigne/CarND-PID-Control-Clojure/compare/solution)
+[my solution](https://github.com/ericlavigne/CarND-MPC-Clojure/compare/solution)
 to see how it compares.
 
 ## License

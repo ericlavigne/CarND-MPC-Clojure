@@ -1,4 +1,4 @@
-(ns pid-control.core
+(ns mpc.core
   (:require [chord.http-kit :refer [with-channel wrap-websocket-handler]]
             [org.httpkit.server :refer [run-server]]
             [clojure.core.async :refer [<! >! go-loop chan dropping-buffer]]

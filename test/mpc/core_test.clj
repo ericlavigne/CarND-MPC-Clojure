@@ -1,6 +1,6 @@
-(ns pid-control.core-test
+(ns mpc.core-test
   (:require [clojure.test :refer :all]
-            [pid-control.core :refer :all]
+            [mpc.core :refer :all]
             [clojure.java.io :as io]
             same))
 
