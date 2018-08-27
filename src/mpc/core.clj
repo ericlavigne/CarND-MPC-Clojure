@@ -38,17 +38,22 @@
 
 (defn format-actuation
   "Format actuation (:steering-angle and :throttle) for transmission to simulator."
-  [{:keys [steering-angle throttle] :as actuation}]
-  (str "42[\"steer\",{\"steering_angle\":"
-       steering-angle
-       ",\"throttle\":"
-       throttle
-       "}]"))
+  [{:keys [steering-angle throttle waypoints plan] :as actuation}]
+  (let [[way-x way-y] (apply mapv vector waypoints)
+        [plan-x plan-y] (apply mapv vector plan)]
+    (str "42"
+      (json/write-str
+        ["steer"
+         {"steering_angle" steering-angle
+          "throttle" throttle
+          "next_x" way-x
+          "next_y" way-y
+          "mpc_x" plan-x
+          "mpc_y" plan-y}]))))
 
 (defn parse-message
   "Parse message from Udacity's SDC term 2 simulator for the PID project."
   [msg]
-  (println msg)
   (if (and msg
            (> (.length msg) 2)
            (= (subs msg 0 2) "42"))
@@ -73,6 +78,22 @@
         json-msg))
     nil))
 
+(defn convert-point-to-vehicle-frame
+  "Convert a point from absolute coordinates to vehicle reference frame"
+  [absxy carxy carpsi]
+  (let [distance (Math/sqrt (+ (Math/pow (- (absxy 0) (carxy 0)) 2)
+                               (Math/pow (- (absxy 1) (carxy 1)) 2)))
+        direction-abs (Math/atan2 (- (absxy 1) (carxy 1)) (- (absxy 0) (carxy 0)))
+        direction-rel (- direction-abs carpsi)
+        relx (* distance (Math/cos direction-rel))
+        rely (* distance (Math/sin direction-rel))]
+    [relx rely]))
+
+(defn convert-points-to-vehicle-frame
+  "Convert list of x and list of y from absolute coordinates to vehicle reference frame"
+  [absx-list absy-list carxy carpsi]
+  (mapv #(convert-point-to-vehicle-frame [%1 %2] carxy carpsi) absx-list absy-list))
+
 (def pid (atom nil))
 (def previous-milliseconds (atom nil))
 (def actuation-period-milliseconds 50)
@@ -83,26 +104,29 @@
   (go-loop []
     (let [{:keys [message]} (<! ws-channel)
           parsed (parse-message message)
-          current-milliseconds (.getTime (java.util.Date.))]
-      (if message
-        (println (str (or parsed message))))
+          current-milliseconds (.getTime (java.util.Date.))
+          cte 0.1]
       (when parsed
         (when (= :telemetry (:type parsed))
           (when (not @pid)
-            (reset! pid (initial-pid (:cte parsed)))
+            (reset! pid (initial-pid cte))
             (reset! previous-milliseconds current-milliseconds))
           (let [milliseconds-elapsed (- current-milliseconds @previous-milliseconds)
-                milliseconds-until-actuation (- actuation-period-milliseconds milliseconds-elapsed)]
+                milliseconds-until-actuation (- actuation-period-milliseconds milliseconds-elapsed)
+                rel-waypoints (convert-points-to-vehicle-frame
+                                (:ptsx parsed) (:ptsy parsed)
+                                [(:x parsed) (:y parsed)]
+                                (:psi parsed))]
             (when (<= milliseconds-until-actuation 0)
-              (swap! pid update-pid (:cte parsed) (* milliseconds-elapsed 0.001 (max 1.0 (:speed parsed))))
+              (swap! pid update-pid cte (* milliseconds-elapsed 0.001 (max 1.0 (:speed parsed))))
               (reset! previous-milliseconds current-milliseconds))
             (when (> milliseconds-until-actuation 0)
               (Thread/sleep milliseconds-until-actuation))
             (let [response (format-actuation {:steering-angle (pid-actuation @pid steering-pid-parameters)
-                                              :throttle (if (< (:speed parsed) speed) 1.0 0.0)})]
-              (>! ws-channel response)
-              (when (= current-milliseconds @previous-milliseconds)
-                (println response)))))
+                                              :throttle (if (< (:speed parsed) speed) 1.0 0.0)
+                                              :waypoints rel-waypoints
+                                              :plan rel-waypoints})]
+              (>! ws-channel response))))
         (when (= :manual (:type parsed))
           (reset! pid nil)
           (Thread/sleep actuation-period-milliseconds)
