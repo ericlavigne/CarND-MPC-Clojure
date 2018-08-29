@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/data.json "0.2.6"]
                  [http-kit "2.3.0"]
+                 [incanter/incanter-core "1.9.3"]
                  [jarohen/chord "0.8.1" :exclude http-kit]
                  [same/ish "0.1.1"]]
   :main ^:skip-aot mpc.core
