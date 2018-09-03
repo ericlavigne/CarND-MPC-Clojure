@@ -3,7 +3,8 @@
             [org.httpkit.server :refer [run-server]]
             [clojure.core.async :refer [<! >! go-loop chan dropping-buffer]]
             [clojure.data.json :as json]
-            [clojure.string :refer [index-of last-index-of]])
+            [clojure.string :refer [index-of last-index-of]]
+            [mpc.frenet :as frenet])
   (:gen-class))
 
 (def steering-pid-parameters
@@ -94,8 +95,28 @@
   [absx-list absy-list carxy carpsi]
   (mapv #(convert-point-to-vehicle-frame [%1 %2] carxy carpsi) absx-list absy-list))
 
-(def pid (atom nil))
-(def previous-milliseconds (atom nil))
+(defn controller
+  "Given telemetry (information about vehicle's situation)
+   decide actuation (steering angle and throttle)."
+  [telemetry]
+  (let [rel-waypoints (convert-points-to-vehicle-frame
+                                (:ptsx telemetry) (:ptsy telemetry)
+                                [(:x telemetry) (:y telemetry)]
+                                (:psi telemetry))
+        car-xy [0 0]
+        car-v [(:speed telemetry) 0]
+        coord (frenet/track rel-waypoints)
+        car-sd (frenet/xy->sd coord (get car-xy 0) (get car-xy 1))
+        car-d (get car-sd 1)]
+    {:steering-angle (min 1.0
+                       (max -1.0
+                         (pid-actuation
+                           (initial-pid car-d)
+                           steering-pid-parameters)))
+     :throttle (if (< (:speed telemetry) speed) 1.0 0.0)
+     :waypoints rel-waypoints
+     :plan rel-waypoints}))
+
 (def actuation-period-milliseconds 50)
 
 (defn handler
@@ -103,35 +124,16 @@
   [{:keys [ws-channel] :as req}]
   (go-loop []
     (let [{:keys [message]} (<! ws-channel)
-          parsed (parse-message message)
-          current-milliseconds (.getTime (java.util.Date.))
-          cte 0.1]
+          parsed (parse-message message)]
       (when parsed
         (when (= :telemetry (:type parsed))
-          (when (not @pid)
-            (reset! pid (initial-pid cte))
-            (reset! previous-milliseconds current-milliseconds))
-          (let [milliseconds-elapsed (- current-milliseconds @previous-milliseconds)
-                milliseconds-until-actuation (- actuation-period-milliseconds milliseconds-elapsed)
-                rel-waypoints (convert-points-to-vehicle-frame
-                                (:ptsx parsed) (:ptsy parsed)
-                                [(:x parsed) (:y parsed)]
-                                (:psi parsed))]
-            (when (<= milliseconds-until-actuation 0)
-              (swap! pid update-pid cte (* milliseconds-elapsed 0.001 (max 1.0 (:speed parsed))))
-              (reset! previous-milliseconds current-milliseconds))
-            (when (> milliseconds-until-actuation 0)
-              (Thread/sleep milliseconds-until-actuation))
-            (let [response (format-actuation {:steering-angle (pid-actuation @pid steering-pid-parameters)
-                                              :throttle (if (< (:speed parsed) speed) 1.0 0.0)
-                                              :waypoints rel-waypoints
-                                              :plan rel-waypoints})]
-              (>! ws-channel response))))
-        (when (= :manual (:type parsed))
-          (reset! pid nil)
           (Thread/sleep actuation-period-milliseconds)
-          (>! ws-channel "42[\"manual\",{}]")))
-      (recur))))
+          (let [response (format-actuation (controller parsed))]
+            (>! ws-channel response))))
+      (when (= :manual (:type parsed))
+        (Thread/sleep actuation-period-milliseconds)
+        (>! ws-channel "42[\"manual\",{}]")))
+    (recur)))
 
 (defn -main
   "Run websocket server to communicate with Udacity PID simulator."
