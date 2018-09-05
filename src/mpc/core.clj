@@ -12,7 +12,7 @@
       :derivative-factor 1.8
       :integral-factor 0.005})
 
-(def speed 20)
+(def speed 50)
 
 (defn initial-pid
   "Set PID errors using only the first measurement."
@@ -103,15 +103,20 @@
                                 (:ptsx telemetry) (:ptsy telemetry)
                                 [(:x telemetry) (:y telemetry)]
                                 (:psi telemetry))
-        car-xy [0 0]
-        car-v [(:speed telemetry) 0]
+        [x y] [0 0]
+        [vx vy] [(:speed telemetry) 0]
         coord (frenet/track rel-waypoints)
-        car-sd (frenet/xy->sd coord (get car-xy 0) (get car-xy 1))
-        car-d (get car-sd 1)]
+        [s d vs vd] (frenet/xyv->sdv coord x y vx vy)]
     {:steering-angle (min 1.0
                        (max -1.0
                          (pid-actuation
-                           (initial-pid car-d)
+                           {:proportional-error d
+                            :derivative-error (/ vd
+                                                 (Math/sqrt
+                                                   (+ (* vd vd)
+                                                      (* vs vs)
+                                                      0.1)))
+                            :integral-error 0.0}
                            steering-pid-parameters)))
      :throttle (if (< (:speed telemetry) speed) 1.0 0.0)
      :waypoints rel-waypoints

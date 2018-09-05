@@ -119,3 +119,19 @@
     ;(println (str "x0:" x0 " y0:" y0 " d:" d))
     [s d]))
 
+(defn sdv->xyv [track s d vs vd]
+  (let [[x0 y0] (sd->xy track s d)
+        tiny 0.01
+        [x1 y1] (sd->xy track (+ s (* tiny vs)) (+ d (* tiny vd)))
+        vx (/ (- x1 x0) tiny)
+        vy (/ (- y1 y0) tiny)]
+    [x0 y0 vx vy]))
+
+(defn xyv->sdv [track x y vx vy]
+  (let [[s0 d0] (xy->sd track x y)
+        tiny 0.01
+        [s1 d1] (xy->sd track (+ x (* tiny vx)) (+ y (* tiny vy)))
+        vs (/ (- s1 s0) tiny)
+        vd (/ (- d1 d0) tiny)]
+    [s0 d0 vs vd]))
+
