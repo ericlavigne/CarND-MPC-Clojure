@@ -31,67 +31,91 @@
         x (map #(get % 0) waypoints)
         y (map #(get % 1) waypoints)
         s->x (interpolate (map vector s x) :cubic)
-        s->y (interpolate (map vector s y) :cubic)
-        dx-ds (map (fn [s0]
-                     (/ (- (s->x (+ s0 0.01))
-                           (s->x (- s0 0.01)))
-                        0.02))
-                s)
-        dy-ds (map (fn [s0]
-                     (/ (- (s->y (+ s0 0.01))
-                           (s->y (- s0 0.01)))
-                        0.02))
-                s)
-        s->dx-ds (interpolate (map vector s dx-ds) :cubic)
-        s->dy-ds (interpolate (map vector s dy-ds) :cubic)]
+        s->y (interpolate (map vector s y) :cubic)]
     {:waypoints waypoints
      ; List of s values for the waypoints
      :s s
      ; Direct converters from s to (x,y) when d=0
      :s->x s->x
-     :s->y s->y
-     ; For given s, what are the partial derivatives dx/ds and dy/ds?
-     ; Due to symmetry, many other partial derivates are easily derivable from these.
-     :s->dx-ds s->dx-ds
-     :s->dy-ds s->dy-ds}))
+     :s->y s->y}))
+
+(defn s->dxy-ds [track s]
+  "Partial derivatives dx/ds and dy/ds at s"
+  (let [s1 (- s 0.01)
+        s2 (+ s 0.01)
+        s->x (:s->x track)
+        s->y (:s->y track)
+        dx (- (s->x s2) (s->x s1))
+        dy (- (s->y s2) (s->y s1))
+        ds (Math/sqrt (+ (* dx dx) (* dy dy)))]
+    [(/ dx ds) (/ dy ds)]))
+
+(defn s->dxy-dd [track s]
+  "Partial derivatives dx/dd and dy/dd at s"
+  (let [[dx-ds dy-ds] (s->dxy-ds track s)]
+    [dy-ds (- dx-ds)]))
+
+(defn s->xy [track s]
+  "Convert s to (x,y) assuming d=0"
+  [((:s->x track) s) ((:s->y track) s)])
 
 (defn sd->xy [track s d]
-  (let [path-x ((:s->x track) s)
-        path-y ((:s->y track) s)
-        dx-ds ((:s->dx-ds track) s)
-        dy-ds ((:s->dy-ds track) s)
-        dx-dd dy-ds
-        dy-dd (- dx-ds)
+  (let [[path-x path-y] (s->xy track s)
+        [dx-dd dy-dd] (s->dxy-dd track s)
         x (+ path-x (* d dx-dd))
         y (+ path-y (* d dy-dd))]
     [x y]))
-  
+
+(defn guardrail-newton
+  "Version of Newton's method with guardrails to ensure convergence"
+  ([f x0 tolerance]
+   (guardrail-newton f x0 tolerance nil nil))
+  ([f x0 tolerance min-x max-x]
+   (let [f0 (f x0)
+         df-dx (/ (- (f (+ x0 tolerance))
+                     (f (- x0 tolerance)))
+                  (+ tolerance tolerance))
+         dx (/ (- f0) df-dx)
+         new-min-x (if (< dx 0) min-x x0)
+         new-max-x (if (< dx 0) x0 max-x)
+         max-dx (if (and min-x max-x)
+                  (* 0.5 (- max-x min-x))
+                  (Math/abs dx))
+         restrained-dx (cond
+                         (> dx max-dx) max-dx
+                         (< dx (- max-dx)) (- max-dx)
+                         :else dx)
+         next-guess (+ x0 restrained-dx)
+         restrained-next-guess (cond
+                                 (and min-x (< next-guess min-x)) min-x
+                                 (and max-x (> next-guess max-x)) max-x
+                                 :else next-guess)]
+     ;(println (str "f:" f0 " df/dx:" df-dx " dx:" dx " ... "
+     ;           x0 " -> " restrained-next-guess " [ " min-x " " max-x " ]"]
+     (if (< (Math/abs restrained-dx) tolerance)
+       next-guess
+       (recur f next-guess tolerance new-min-x new-max-x)))))
+
 (defn xy->sd [track x y]
-  (let [refine-s (fn [s0]
-                   (let [[x0 y0] (sd->xy track s0 0)
-                         dx-ds ((:s->dx-ds track) s0)
-                         dy-ds ((:s->dy-ds track) s0)]
-                     (+ s0 (* dx-ds (- x x0)) (* dy-ds (- y y0)))))
+  (let [estimated-delta-s (fn [s0]
+                            (let [[x0 y0] (s->xy track s0)
+                                  [dx-ds dy-ds] (s->dxy-ds track s0)]
+                              (+ (* dx-ds (- x x0))
+                                 (* dy-ds (- y y0)))))
         closest-waypoint-i (apply min-key #(distance [x y] (get (:waypoints track) %))
                              (range (count (:waypoints track))))
         closest-waypoint-s (get (:s track) closest-waypoint-i)
-        s (loop [s0 closest-waypoint-s
-                 i 0]
-            (let [new-s (refine-s s0)]
-              ;(println (str "s: " s0 " -> " new-s))
-              (cond
-                (> 0.00001 (Math/abs (- new-s s0))) new-s
-                (< i 2) (recur new-s (inc i))
-                (< i 4) (recur (+ s0 (* 0.5 (- new-s s0))) (inc i))
-                (< i 10) (recur (+ s0 (* 0.1 (- new-s s0))) (inc i))
-                :else (+ s0 (* 0.05 (- new-s s0))))))
-        [x0 y0] (sd->xy track s 0)
-        dx-ds ((:s->dx-ds track) s)
-        dy-ds ((:s->dy-ds track) s)
-        dd-dx dy-ds
-        dd-dy (- dx-ds)
-        d (+ (* dd-dx (- x x0)) (* dd-dx (- y y0)))
-        distance (Math/sqrt (+ (Math/pow (- y y0) 2) (Math/pow (- x x0) 2)))]
-    ;(println (str "x0:" x0 " y0:" y0 " d:" d " distance:" distance))
-    [s (if (> d 0) distance (- distance))]))
+        next-waypoint-s (if (< closest-waypoint-i (count (:waypoints track)))
+                          (get (:s track) (inc closest-waypoint-i))
+                          nil)
+        prev-waypoint-s (if (= closest-waypoint-i 0)
+                          nil
+                          (get (:s track) (dec closest-waypoint-i)))
+        s (guardrail-newton estimated-delta-s closest-waypoint-s
+            0.001 prev-waypoint-s next-waypoint-s)
+        [x0 y0] (s->xy track s)
+        [dd-dx dd-dy] (s->dxy-dd track s)
+        d (+ (* dd-dx (- x x0)) (* dd-dy (- y y0)))]
+    ;(println (str "x0:" x0 " y0:" y0 " d:" d))
+    [s d]))
 
