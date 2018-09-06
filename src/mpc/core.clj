@@ -95,6 +95,22 @@
   [absx-list absy-list carxy carpsi]
   (mapv #(convert-point-to-vehicle-frame [%1 %2] carxy carpsi) absx-list absy-list))
 
+(defn policy [global state]
+  (let [[x y vx vy s d vs vd] state
+        steering (min 1.0
+                   (max -1.0
+                     (pid-actuation
+                       {:proportional-error d
+                        :derivative-error (/ vd
+                                             (Math/sqrt
+                                               (+ (* vd vd)
+                                                  (* vs vs)
+                                                  0.1)))
+                        :integral-error 0.0}
+                       steering-pid-parameters)))
+        throttle (if (< vs speed) 1.0 0.0)]
+    [steering throttle]))
+
 (defn controller
   "Given telemetry (information about vehicle's situation)
    decide actuation (steering angle and throttle)."
@@ -106,19 +122,12 @@
         [x y] [0 0]
         [vx vy] [(:speed telemetry) 0]
         coord (frenet/track rel-waypoints)
-        [s d vs vd] (frenet/xyv->sdv coord x y vx vy)]
-    {:steering-angle (min 1.0
-                       (max -1.0
-                         (pid-actuation
-                           {:proportional-error d
-                            :derivative-error (/ vd
-                                                 (Math/sqrt
-                                                   (+ (* vd vd)
-                                                      (* vs vs)
-                                                      0.1)))
-                            :integral-error 0.0}
-                           steering-pid-parameters)))
-     :throttle (if (< (:speed telemetry) speed) 1.0 0.0)
+        [s d vs vd] (frenet/xyv->sdv coord x y vx vy)
+        global {:frenet coord}
+        state [x y vx vy s d vs vd]
+        [steering throttle] (policy global state)]
+    {:steering-angle steering
+     :throttle throttle
      :waypoints rel-waypoints
      :plan rel-waypoints}))
 
