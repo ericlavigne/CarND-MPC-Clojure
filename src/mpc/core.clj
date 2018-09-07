@@ -95,8 +95,10 @@
   [absx-list absy-list carxy carpsi]
   (mapv #(convert-point-to-vehicle-frame [%1 %2] carxy carpsi) absx-list absy-list))
 
-(defn policy [global state]
-  (let [[x y vx vy s d vs vd] state
+(defn policy
+  "Given current state, determine next actuation."
+  [global state]
+  (let [[x y psi v vx vy s d vs vd] state
         steering (min 1.0
                    (max -1.0
                      (pid-actuation
@@ -111,6 +113,26 @@
         throttle (if (< vs speed) 1.0 0.0)]
     [steering throttle]))
 
+(defn predict
+  "Given current state and actuation, determine how
+   the state will change."
+  [global state actuation dt]
+  (let [[x0 y0 psi0 v0 vx0 vy0 s0 d0 vs0 vd0] state
+        [steering throttle] actuation
+        coord (:frenet global)
+        Lf 2.67
+        steer_radians (* 25 steering (/ Math/PI 180))
+        ; Physics
+        x (+ x0 (* vx0 dt))
+        y (+ y0 (* vy0 dt))
+        psi (- psi0 (* v0 dt (/ steer_radians Lf)))
+        v (+ v0 (* throttle dt))
+        ; Derived parts of state
+        vx (* v (Math/cos psi))
+        vy (* v (Math/sin psi))
+        [s d vs vd] (frenet/xyv->sdv coord x y vx vy)]
+    [x y psi v vx vy s d vs vd]))
+
 (defn controller
   "Given telemetry (information about vehicle's situation)
    decide actuation (steering angle and throttle)."
@@ -124,12 +146,14 @@
         coord (frenet/track rel-waypoints)
         [s d vs vd] (frenet/xyv->sdv coord x y vx vy)
         global {:frenet coord}
-        state [x y vx vy s d vs vd]
-        [steering throttle] (policy global state)]
+        state [x y 0.0 vx vx vy s d vs vd]
+        [steering throttle] (policy global state)
+        plan (take 10 (iterate #(predict global % [steering throttle] 0.1) state))
+        plan-xy (mapv #(vec (take 2 %)) plan)]
     {:steering-angle steering
      :throttle throttle
      :waypoints rel-waypoints
-     :plan rel-waypoints}))
+     :plan plan-xy}))
 
 (def actuation-period-milliseconds 50)
 
