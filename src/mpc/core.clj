@@ -5,6 +5,7 @@
             [clojure.data.json :as json]
             [clojure.string :refer [index-of last-index-of]]
             [figurer.core :as figurer]
+            [incanter.distributions :refer [uniform-distribution]]
             [mpc.frenet :as frenet])
   (:gen-class))
 
@@ -97,11 +98,14 @@
   (mapv #(convert-point-to-vehicle-frame [%1 %2] carxy carpsi) absx-list absy-list))
 
 (defn policy
-  "Given current state, determine next actuation."
+  "Given current state, determine next actuation.
+   Each element of the result vector is a probability
+   distribution to represent the uncertainty in which
+   actuation would be the best."
   [state]
   (let [[x y psi v vx vy s d vs vd] state
-        steering (min 1.0
-                   (max -1.0
+        steering (min 0.95
+                   (max -0.95
                      (pid-actuation
                        {:proportional-error d
                         :derivative-error (/ vd
@@ -111,8 +115,9 @@
                                                   0.1)))
                         :integral-error 0.0}
                        steering-pid-parameters)))
-        throttle (if (< vs speed) 1.0 0.0)]
-    [steering throttle]))
+        throttle (if (< vs speed) 0.95 0.05)]
+    [(uniform-distribution (- steering 0.05) (+ steering 0.05))
+     (uniform-distribution (- throttle 0.05) (+ throttle 0.05))]))
 
 (defn predict
   "Given current state and actuation, determine how

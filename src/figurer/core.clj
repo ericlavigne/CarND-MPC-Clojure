@@ -1,13 +1,18 @@
-(ns figurer.core)
+(ns figurer.core
+  (:require [incanter.distributions :refer [draw]]))
 
 (defn create
   "Defines the context for all simulation and optimization.
   
-     policy: function from state to actuation
+     policy: function from state to actuation distribution
      value: function from state to number
      predict: function from state and actuation to state
-     initial-state: state is a vector of doubles
+     initial-state: state
      depth: integer indicating how many timesteps to consider
+     state: vector of doubles
+     actuation: vector of doubles
+     actuation distribution: vector of incanter distributions
+         (sample from each of these distributions to get one actuation)
   
    TODO: Initialize nodes."
   [{:keys [policy value predict initial-state depth] :as options}]
@@ -30,7 +35,7 @@
    TODO: Use simulation results to refine rather
    than just sampling from the initial policy."
   ([context] (sample-policy context (:initial-state context)))
-  ([context state] ((:policy context) state)))
+  ([context state] (mapv draw ((:policy context) state))))
 
 (defn sample-plan
   "Returns a list of states and actuations starting
