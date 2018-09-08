@@ -148,7 +148,11 @@
         global {:frenet coord}
         state [x y 0.0 vx vx vy s d vs vd]
         [steering throttle] (policy global state)
-        plan (take 10 (iterate #(predict global % [steering throttle] 0.1) state))
+        plan (take 10 (iterate
+                        (fn [state]
+                          (let [[steering throttle] (policy global state)]
+                            (predict global state [steering throttle] 0.1)))
+                        state))
         plan-xy (mapv #(vec (take 2 %)) plan)]
     {:steering-angle steering
      :throttle throttle
