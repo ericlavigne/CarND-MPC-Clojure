@@ -4,6 +4,7 @@
             [clojure.core.async :refer [<! >! go-loop chan dropping-buffer]]
             [clojure.data.json :as json]
             [clojure.string :refer [index-of last-index-of]]
+            [figurer.core :as figurer]
             [mpc.frenet :as frenet])
   (:gen-class))
 
@@ -97,7 +98,7 @@
 
 (defn policy
   "Given current state, determine next actuation."
-  [global state]
+  [state]
   (let [[x y psi v vx vy s d vs vd] state
         steering (min 1.0
                    (max -1.0
@@ -116,10 +117,9 @@
 (defn predict
   "Given current state and actuation, determine how
    the state will change."
-  [global state actuation dt]
+  [state actuation coord dt]
   (let [[x0 y0 psi0 v0 vx0 vy0 s0 d0 vs0 vd0] state
         [steering throttle] actuation
-        coord (:frenet global)
         Lf 2.67
         steer_radians (* 25 steering (/ Math/PI 180))
         ; Physics
@@ -160,16 +160,17 @@
         [vx vy] [(:speed telemetry) 0]
         coord (frenet/track rel-waypoints)
         [s d vs vd] (frenet/xyv->sdv coord x y vx vy)
-        global {:frenet coord}
         state [x y 0.0 vx vx vy s d vs vd]
-        [steering throttle] (policy global state)
-        plan (take 10 (iterate
-                        (fn [state]
-                          (let [[steering throttle] (policy global state)]
-                            (predict global state [steering throttle] 0.1)))
-                        state))
-        plan-value (reduce + (map value plan))
-        plan-xy (mapv #(vec (take 2 %)) plan)]
+        figured (figurer/create {:policy policy
+                                 :predict (fn [state actuation]
+                                            (predict state actuation coord 0.1))
+                                 :value value
+                                 :initial-state state
+                                 :depth 10})
+        plan (figurer/sample-plan figured)
+        [steering throttle] (first (:actuations plan))
+        plan-value (figurer/expected-value figured)
+        plan-xy (mapv #(vec (take 2 %)) (:states plan))]
     (println (str "Value: " (Math/round plan-value)))
     {:steering-angle steering
      :throttle throttle
