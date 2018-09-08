@@ -133,6 +133,21 @@
         [s d vs vd] (frenet/xyv->sdv coord x y vx vy)]
     [x y psi v vx vy s d vs vd]))
 
+(defn value
+  "Measure of how 'good' a state is. A plan will
+   be chosen that maximizes the average result of
+   this function across each state in the plan."
+  [state]
+  (let [[x y psi v vx vy s d vs vd] state
+        progress s
+        distance-from-center (Math/abs d)
+        sideways-speed (Math/abs vd)
+        on-road (< distance-from-center 3.0)]
+    (+ progress
+       (- distance-from-center)
+       (- sideways-speed)
+       (if on-road 0.0 -100.0))))
+
 (defn controller
   "Given telemetry (information about vehicle's situation)
    decide actuation (steering angle and throttle)."
@@ -153,7 +168,9 @@
                           (let [[steering throttle] (policy global state)]
                             (predict global state [steering throttle] 0.1)))
                         state))
+        plan-value (reduce + (map value plan))
         plan-xy (mapv #(vec (take 2 %)) plan)]
+    (println (str "Value: " (Math/round plan-value)))
     {:steering-angle steering
      :throttle throttle
      :waypoints rel-waypoints
