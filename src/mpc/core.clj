@@ -110,7 +110,7 @@
                        {:proportional-error d
                         :derivative-error (/ vd
                                              (Math/sqrt
-                                               (+ (* vd vd)
+                                               (+ (* vd vd) ; state missing last two elements?
                                                   (* vs vs)
                                                   0.1)))
                         :integral-error 0.0}
@@ -172,6 +172,7 @@
                                  :value value
                                  :initial-state state
                                  :depth 10})
+        figured (figurer/figure figured {:max-seconds 0.01})
         plan (figurer/sample-plan figured)
         [steering throttle] (first (:actuations plan))
         plan-value (figurer/expected-value figured)
