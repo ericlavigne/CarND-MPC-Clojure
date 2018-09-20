@@ -23,7 +23,7 @@
                       :visits 0
                       :direct-value direct-value
                       :value direct-value
-                      :next-node-ids []}]
+                      :next-nodes {}}]
     (merge options
       {:nodes-so-far 1
        :initial-node-id initial-node-id
@@ -35,8 +35,9 @@
    TODO: Choose promising node (or nil if winner so far is clear)
          rather than just choosing randomly."
   [context node-id]
-  (draw (conj (:next-node-ids (get (:node-id-to-node context)
-                                node-id))
+  (draw (conj (keys
+                (:next-nodes (get (:node-id-to-node context)
+                                  node-id)))
           nil)))
 
 (defn figure-rollout
@@ -75,14 +76,14 @@
                   :visits 0
                   :direct-value direct-value
                   :value direct-value
-                  :next-node-ids []}
+                  :next-nodes {}}
         new-context (assoc-in
                       (update context :nodes-so-far inc)
                       [:node-id-to-node node-id]
                       new-node)
-        new-context (update-in new-context
-                      [:node-id-to-node parent-node-id :next-node-ids]
-                      conj node-id)]
+        new-context (assoc-in new-context
+                      [:node-id-to-node parent-node-id :next-nodes node-id]
+                      {:node-id node-id :actuation actuation})]
     [new-context node-id]))
 
 (defn figure-once
@@ -114,7 +115,7 @@
                     (let [node-id (first node-ids-to-update)
                           node (get (:node-id-to-node context) node-id)
                           children (map (:node-id-to-node context)
-                                     (:next-node-ids node))
+                                     (keys (:next-nodes node)))
                           max-child-value (apply max (map :value children))
                           new-value (+ (:direct-value node) max-child-value)
                           new-node (merge node
@@ -156,22 +157,35 @@
   "Returns a list of states and actuations starting
    from a given state (defaulting to initial state).
    Result states is longer than actuations because
-   initial state is included.
-   TODO: Use simulation results to refine rather
-   than just sampling from the initial policy."
-  ([context] (sample-plan context (:initial-state context)))
-  ([context initial-state]
-   (loop [last-state initial-state
-          previous-states [initial-state]
-          previous-actuations []
-          remaining (:depth context)]
-     (if (< remaining 1)
-       {:states previous-states :actuations previous-actuations}
-       (let [actuation (sample-policy context last-state)
-             state ((:predict context) last-state actuation)]
-         (recur state (conj previous-states state)
-           (conj previous-actuations actuation)
-           (dec remaining)))))))
+   initial state is included."
+  ([context]
+   (let [first-node ((:node-id-to-node context) (:initial-node-id context))
+         node-path (loop [current first-node
+                          previous-states [(:state first-node)]
+                          previous-actuations []]
+                     (let [next-nodes (map (:node-id-to-node context)
+                                        (keys (:next-nodes current)))
+                           next-node (if (empty? next-nodes)
+                                       nil
+                                       (apply max-key :value next-nodes))]
+                       (if (nil? next-node)
+                         {:states previous-states :actuations previous-actuations}
+                         (recur next-node
+                           (conj previous-states (:state next-node))
+                           (conj previous-actuations
+                             (get-in current
+                               [:next-nodes (:id next-node) :actuation]))))))]
+     (loop [last-state (last (:states node-path))
+            previous-states (:states node-path)
+            previous-actuations (:actuations node-path)
+            remaining (- (:depth context) (count (:actuations node-path)))]
+       (if (< remaining 1)
+         {:states previous-states :actuations previous-actuations}
+         (let [actuation (sample-policy context last-state)
+               state ((:predict context) last-state actuation)]
+           (recur state (conj previous-states state)
+             (conj previous-actuations actuation)
+             (dec remaining))))))))
 
 (defn expected-value
   "Estimates the average value that would be

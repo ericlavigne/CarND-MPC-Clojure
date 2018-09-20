@@ -176,12 +176,17 @@
         plan (figurer/sample-plan figured)
         [steering throttle] (first (:actuations plan))
         plan-value (figurer/expected-value figured)
-        plan-xy (mapv #(vec (take 2 %)) (:states plan))]
-    (println (str "Value: " (Math/round plan-value)))
-    {:steering-angle steering
-     :throttle throttle
-     :waypoints rel-waypoints
-     :plan plan-xy}))
+        plan-xy (mapv #(vec (take 2 %)) (:states plan))
+        result {:steering-angle steering
+                :throttle throttle
+                :waypoints rel-waypoints
+                :plan plan-xy}]
+    ;(println (str "Value: " (Math/round plan-value)))
+    ;(println (str "Controller result: " result))
+    ;(println (str "Actuations: " (:actuations plan)))
+    ;(println (str "Figured: " figured))
+    result))
+    
 
 (def actuation-period-milliseconds 50)
 
