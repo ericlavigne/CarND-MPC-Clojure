@@ -14,7 +14,7 @@
       :derivative-factor 1.8
       :integral-factor 0.005})
 
-(def speed 50)
+(def speed 55)
 
 (defn initial-pid
   "Set PID errors using only the first measurement."
@@ -153,6 +153,8 @@
        (- sideways-speed)
        (if on-road 0.0 -100.0))))
 
+(def actuation-period-milliseconds 50)
+
 (defn controller
   "Given telemetry (information about vehicle's situation)
    decide actuation (steering angle and throttle)."
@@ -172,7 +174,8 @@
                                  :value value
                                  :initial-state state
                                  :depth 10})
-        figured (figurer/figure figured {:max-seconds 0.01})
+        figured (figurer/figure figured
+                  {:max-seconds (* 0.001 actuation-period-milliseconds)})
         plan (figurer/sample-plan figured)
         [steering throttle] (first (:actuations plan))
         plan-value (figurer/expected-value figured)
@@ -186,9 +189,6 @@
     ;(println (str "Actuations: " (:actuations plan)))
     ;(println (str "Figured: " figured))
     result))
-    
-
-(def actuation-period-milliseconds 50)
 
 (defn handler
   "Called in response to websocket connection. Handles sending and receiving messages."
@@ -198,8 +198,13 @@
           parsed (parse-message message)]
       (when parsed
         (when (= :telemetry (:type parsed))
-          (Thread/sleep actuation-period-milliseconds)
-          (let [response (format-actuation (controller parsed))]
+          (let [start-millis (.getTime (java.util.Date.))
+                response (format-actuation (controller parsed))
+                end-millis (.getTime (java.util.Date.))
+                millis-remaining (- actuation-period-milliseconds
+                                    (- end-millis start-millis))]
+            (when (> millis-remaining 0)
+              (Thread/sleep millis-remaining))
             (>! ws-channel response))))
       (when (= :manual (:type parsed))
         (Thread/sleep actuation-period-milliseconds)
@@ -207,7 +212,7 @@
     (recur)))
 
 (defn -main
-  "Run websocket server to communicate with Udacity PID simulator."
+  "Run websocket server to communicate with Udacity MPC simulator."
   [& args]
   (println "Starting server")
   (run-server (-> #'handler
@@ -215,3 +220,4 @@
                     {:read-ch (chan (dropping-buffer 10))
                      :format :str}))
               {:port 4567}))
+
