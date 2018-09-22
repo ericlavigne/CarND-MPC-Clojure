@@ -14,7 +14,7 @@
       :derivative-factor 1.8
       :integral-factor 0.005})
 
-(def speed 55)
+(def speed 85)
 
 (defn initial-pid
   "Set PID errors using only the first measurement."
@@ -168,6 +168,10 @@
         coord (frenet/track rel-waypoints)
         [s d vs vd] (frenet/xyv->sdv coord x y vx vy)
         state [x y 0.0 vx vx vy s d vs vd]
+        state (predict state
+                [(:steering-angle telemetry) (:throttle telemetry)]
+                coord
+                (* 0.001 actuation-period-milliseconds))
         figured (figurer/create {:policy policy
                                  :predict (fn [state actuation]
                                             (predict state actuation coord 0.1))
