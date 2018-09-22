@@ -153,7 +153,7 @@
        (- sideways-speed)
        (if on-road 0.0 -100.0))))
 
-(def actuation-period-milliseconds 50)
+(def actuation-period-milliseconds 100)
 
 (defn controller
   "Given telemetry (information about vehicle's situation)
@@ -168,21 +168,22 @@
         coord (frenet/track rel-waypoints)
         [s d vs vd] (frenet/xyv->sdv coord x y vx vy)
         state [x y 0.0 vx vx vy s d vs vd]
+        delay-seconds (* 0.001 actuation-period-milliseconds)
         state (predict state
                 [(:steering-angle telemetry) (:throttle telemetry)]
                 coord
-                (* 0.001 actuation-period-milliseconds))
-        figured (figurer/create {:policy policy
+                delay-seconds)
+        problem (figurer/create {:policy policy
                                  :predict (fn [state actuation]
-                                            (predict state actuation coord 0.1))
+                                            (predict state actuation coord delay-seconds))
                                  :value value
                                  :initial-state state
                                  :depth 10})
-        figured (figurer/figure figured
-                  {:max-seconds (* 0.001 actuation-period-milliseconds)})
-        plan (figurer/sample-plan figured)
+        solution (figurer/figure problem
+                   {:max-seconds delay-seconds})
+        plan (figurer/sample-plan solution)
+        plan-value (figurer/expected-value solution)
         [steering throttle] (first (:actuations plan))
-        plan-value (figurer/expected-value figured)
         plan-xy (mapv #(vec (take 2 %)) (:states plan))
         result {:steering-angle steering
                 :throttle throttle
