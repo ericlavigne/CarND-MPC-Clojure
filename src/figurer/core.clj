@@ -1,8 +1,12 @@
 (ns figurer.core
   (:require [incanter.distributions :refer [draw]]))
 
-(defn create
+(defn define-problem
   "Defines the context for all simulation and optimization.
+   Includes null solution because problem and solution are
+   the same data type in figurer, differing only in degree
+   of refinement. Internally, the problem or solution
+   instance is referred to as a context.
   
      policy: function from state to actuation distribution
      value: function from state to number

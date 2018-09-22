@@ -173,12 +173,12 @@
                 [(:steering-angle telemetry) (:throttle telemetry)]
                 coord
                 delay-seconds)
-        problem (figurer/create {:policy policy
-                                 :predict (fn [state actuation]
-                                            (predict state actuation coord delay-seconds))
-                                 :value value
-                                 :initial-state state
-                                 :depth 10})
+        problem (figurer/define-problem {:policy policy
+                                         :predict (fn [state actuation]
+                                                    (predict state actuation coord delay-seconds))
+                                         :value value
+                                         :initial-state state
+                                         :depth 10})
         solution (figurer/figure problem
                    {:max-seconds delay-seconds})
         plan (figurer/sample-plan solution)
