@@ -97,6 +97,31 @@
   [absx-list absy-list carxy carpsi]
   (mapv #(convert-point-to-vehicle-frame [%1 %2] carxy carpsi) absx-list absy-list))
 
+(defn pd-steering-estimate
+  "Given a state, what steering angle does
+   a PD controller recommend?"
+  [state]
+  (let [[x y psi v vx vy s d vs vd] state]
+    (pid-actuation
+      {:proportional-error d
+       :derivative-error (/ vd
+                            (Math/sqrt
+                              (+ (* vd vd)
+                                 (* vs vs)
+                                 0.1)))
+       :integral-error 0.0}
+      steering-pid-parameters)))
+
+(defn constrain
+  "Return value if between min-value and max-value.
+   If below min-value return min-value. If above
+   max-value return max-value."
+  [value min-value max-value]
+  (cond
+    (and min-value (< value min-value)) min-value
+    (and max-value (> value max-value)) max-value
+    :else value))
+
 (defn policy
   "Given current state, determine next actuation.
    Each element of the result vector is a probability
@@ -104,18 +129,8 @@
    actuation would be the best."
   [state]
   (let [[x y psi v vx vy s d vs vd] state
-        steering (min 0.95
-                   (max -0.95
-                     (pid-actuation
-                       {:proportional-error d
-                        :derivative-error (/ vd
-                                             (Math/sqrt
-                                               (+ (* vd vd) ; state missing last two elements?
-                                                  (* vs vs)
-                                                  0.1)))
-                        :integral-error 0.0}
-                       steering-pid-parameters)))
-        throttle (if (< vs speed) 0.95 0.05)]
+        steering (constrain (pd-steering-estimate state) -0.95 0.95)
+        throttle (if (< v speed) 0.95 0.05)]
     [(uniform-distribution (- steering 0.05) (+ steering 0.05))
      (uniform-distribution (- throttle 0.05) (+ throttle 0.05))]))
 
@@ -131,7 +146,8 @@
         x (+ x0 (* vx0 dt))
         y (+ y0 (* vy0 dt))
         psi (- psi0 (* v0 dt (/ steer_radians Lf)))
-        v (+ v0 (* throttle dt))
+        v (constrain (+ v0 (* throttle dt))
+            0.0 (max v0 100.0))
         ; Derived parts of state
         vx (* v (Math/cos psi))
         vy (* v (Math/sin psi))
@@ -144,14 +160,15 @@
    this function across each state in the plan."
   [state]
   (let [[x y psi v vx vy s d vs vd] state
-        progress s
-        distance-from-center (Math/abs d)
-        sideways-speed (Math/abs vd)
+        progress (min vs speed) ; Typically 80
+        distance-from-center (Math/abs d) ; Range 0-3
+        sideways-speed (Math/abs vd) ; Range 0-10
         on-road (< distance-from-center 3.0)]
-    (+ progress
-       (- distance-from-center)
-       (- sideways-speed)
-       (if on-road 0.0 -100.0))))
+    (+ (if on-road
+         progress ; Credit for speed if on road
+         -1000.0) ; Severe penalty if off road
+       (* -10.0 distance-from-center) ; Prefer center of road
+       (* -1.0 sideways-speed)))) ; Prefer no side-to-side wobbling
 
 (def actuation-period-milliseconds 100)
 
@@ -189,10 +206,6 @@
                 :throttle throttle
                 :waypoints rel-waypoints
                 :plan plan-xy}]
-    ;(println (str "Value: " (Math/round plan-value)))
-    ;(println (str "Controller result: " result))
-    ;(println (str "Actuations: " (:actuations plan)))
-    ;(println (str "Figured: " figured))
     result))
 
 (defn handler
