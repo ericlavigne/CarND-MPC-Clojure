@@ -6,7 +6,7 @@
             [clojure.string :refer [index-of last-index-of]]
             [figurer.core :as figurer]
             [incanter.distributions :refer [uniform-distribution]]
-            [mpc.frenet :as frenet])
+            [frenet.core :as frenet])
   (:gen-class))
 
 (def steering-pid-parameters
