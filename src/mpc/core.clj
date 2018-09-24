@@ -14,8 +14,7 @@
       :derivative-factor 1.8
       :integral-factor 0.005})
 
-; TODO: When your car drives well at this speed, try increasing the speed for extra challenge.
-(def max-speed 20)
+(def speed 85)
 
 (defn initial-pid
   "Set PID errors using only the first measurement."
@@ -151,12 +150,9 @@
    actuation would be the best."
   [state]
   (let [[x y psi v vx vy s d vs vd] state
-        steering-best-guess 0.0 ; TODO: Use pd-steering-estimate for better guess.
-        steering-uncertainty 1.0 ; TODO: Experiment with uncertainty between 0.01 and 1.0.
-        throttle (if (< v max-speed) 0.95 0.05)]
-    [(uniform-distribution
-       (- steering-best-guess steering-uncertainty)
-       (+ steering-best-guess steering-uncertainty))
+        steering (constrain (pd-steering-estimate state) -0.95 0.95)
+        throttle (if (< v speed) 0.95 0.05)]
+    [(uniform-distribution (- steering 0.05) (+ steering 0.05))
      (uniform-distribution (- throttle 0.05) (+ throttle 0.05))]))
 
 (defn predict
@@ -168,10 +164,11 @@
         Lf 2.67
         steer_radians (* 25 steering (/ Math/PI 180))
         ; Physics
-        x x0 ; TODO: Calculate new value of x based on x0.
-        y y0 ; TODO: Calculate new value of y based on y0.
+        x (+ x0 (* vx0 dt))
+        y (+ y0 (* vy0 dt))
         psi (- psi0 (* v0 dt (/ steer_radians Lf)))
-        v v0 ; TODO: Calculate new value of v based on v0.
+        v (constrain (+ v0 (* throttle dt))
+            0.0 (max v0 100.0))
         ; Derived parts of state
         vx (* v (Math/cos psi))
         vy (* v (Math/sin psi))
@@ -184,14 +181,15 @@
    this function across each state in the plan."
   [state]
   (let [[x y psi v vx vy s d vs vd] state
-        distance-from-center (Math/abs d)
+        progress (min vs speed) ; Typically 80
+        distance-from-center (Math/abs d) ; Range 0-3
+        sideways-speed (Math/abs vd) ; Range 0-10
         on-road (< distance-from-center 3.0)]
-    (+ 0.0 ; TODO: Increase result based on how quickly car is moving forward.
-       (if on-road
-         0.0  ; TODO: Choose bonus for staying on road
-         0.0) ; TODO: Subtract penalty for driving off the road
-       0.0    ; TODO: Subtract penalty for distance from center of road
-       0.0))) ; TODO: Choose at least one new metric for how well the car is doing.
+    (+ (if on-road
+         progress ; Credit for speed if on road
+         -1000.0) ; Severe penalty if off road
+       (* -10.0 distance-from-center) ; Prefer center of road
+       (* -1.0 sideways-speed)))) ; Prefer no side-to-side wobbling
 
 ; Udacity requires 100 ms delay when submitting.
 ; Feel free to experiment with other values until then.
@@ -215,13 +213,12 @@
                 [(:steering-angle telemetry) (:throttle telemetry)]
                 coord
                 delay-seconds)
-        ; TODO: Choose depth - how many steps ahead figurer should explore.
         problem (figurer/define-problem {:policy policy
                                          :predict (fn [state actuation]
                                                     (predict state actuation coord delay-seconds))
                                          :value value
                                          :initial-state state
-                                         :depth 1})
+                                         :depth 10})
         solution (figurer/figure problem
                    {:max-seconds delay-seconds})
         plan (figurer/sample-plan solution)
