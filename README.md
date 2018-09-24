@@ -38,12 +38,10 @@ or [Vim](https://github.com/tpope/vim-fireplace).
 ## Usage
 
 You'll find many TODO comments in src/mpc/core.clj indicating parts of
-the code that you will need to complete. You are encouraged to run the automated
-tests frequently to confirm that your changes work correctly.
+the code that you will need to complete. The code already runs as-is,
+but the car will drive poorly until you make improvements.
 
-    $ lein test
-
-When the code is complete, you can run it with the following command. You should also run
+You can run the code with the following command. You should also run
 [Udacity's term 2 simulator](https://github.com/udacity/self-driving-car-sim/releases)
 at the same time and select the "MPC Control" project.
 
