@@ -14,7 +14,8 @@
       :derivative-factor 1.8
       :integral-factor 0.005})
 
-(def speed 85)
+; TODO: When your car drives well at this speed, try increasing the speed for extra challenge.
+(def max-speed 20)
 
 (defn initial-pid
   "Set PID errors using only the first measurement."
@@ -97,21 +98,6 @@
   [absx-list absy-list carxy carpsi]
   (mapv #(convert-point-to-vehicle-frame [%1 %2] carxy carpsi) absx-list absy-list))
 
-(defn pd-steering-estimate
-  "Given a state, what steering angle does
-   a PD controller recommend?"
-  [state]
-  (let [[x y psi v vx vy s d vs vd] state]
-    (pid-actuation
-      {:proportional-error d
-       :derivative-error (/ vd
-                            (Math/sqrt
-                              (+ (* vd vd)
-                                 (* vs vs)
-                                 0.1)))
-       :integral-error 0.0}
-      steering-pid-parameters)))
-
 (defn constrain
   "Return value if between min-value and max-value.
    If below min-value return min-value. If above
@@ -122,6 +108,42 @@
     (and max-value (> value max-value)) max-value
     :else value))
 
+; State variable definitions
+;
+; x,y : position coordinates
+; psi : direction of car in radians
+; v   : speed of the car
+; vx  : speed in x direction (negative if car moves in -x direction)
+; vy  : speed in y direction (negative if car moves in -y direction)
+; s   : how far car has moved along the road (positive if car has moved forward)
+; d   : how far car is to the right of center of the road
+;       (0.0 is center, -3.0 is left side, 3.0 is right side)
+; vs  : how fast car is moving along the road
+; vd  : how fast car is moving to the right
+;       (negative is moving to the left, positive is moving to the right)
+
+; Actuation variable definitions
+;
+; steering : 0.0 is forward, -1.0 is hard left turn, 1.0 is hard right turn
+; throttle : 1.0 is flooring the gas pedal, -1.0 is flooring the brake, 0.0 is coasting
+
+(defn pd-steering-estimate
+  "Given a state, what steering angle does
+   a PD controller recommend?"
+  [state]
+  (let [[x y psi v vx vy s d vs vd] state]
+    (constrain
+      (pid-actuation
+        {:proportional-error d
+         :derivative-error (/ vd
+                              (Math/sqrt
+                                (+ (* vd vd)
+                                   (* vs vs)
+                                   0.1)))
+         :integral-error 0.0}
+        steering-pid-parameters)
+      -1.0 1.0)))
+
 (defn policy
   "Given current state, determine next actuation.
    Each element of the result vector is a probability
@@ -129,9 +151,12 @@
    actuation would be the best."
   [state]
   (let [[x y psi v vx vy s d vs vd] state
-        steering (constrain (pd-steering-estimate state) -0.95 0.95)
-        throttle (if (< v speed) 0.95 0.05)]
-    [(uniform-distribution (- steering 0.05) (+ steering 0.05))
+        steering-best-guess 0.0 ; TODO: Use pd-steering-estimate for better guess.
+        steering-uncertainty 1.0 ; TODO: Experiment with uncertainty between 0.01 and 1.0.
+        throttle (if (< v max-speed) 0.95 0.05)]
+    [(uniform-distribution
+       (- steering-best-guess steering-uncertainty)
+       (+ steering-best-guess steering-uncertainty))
      (uniform-distribution (- throttle 0.05) (+ throttle 0.05))]))
 
 (defn predict
@@ -143,11 +168,10 @@
         Lf 2.67
         steer_radians (* 25 steering (/ Math/PI 180))
         ; Physics
-        x (+ x0 (* vx0 dt))
-        y (+ y0 (* vy0 dt))
+        x x0 ; TODO: Calculate new value of x based on x0.
+        y y0 ; TODO: Calculate new value of y based on y0.
         psi (- psi0 (* v0 dt (/ steer_radians Lf)))
-        v (constrain (+ v0 (* throttle dt))
-            0.0 (max v0 100.0))
+        v v0 ; TODO: Calculate new value of v based on v0.
         ; Derived parts of state
         vx (* v (Math/cos psi))
         vy (* v (Math/sin psi))
@@ -160,16 +184,17 @@
    this function across each state in the plan."
   [state]
   (let [[x y psi v vx vy s d vs vd] state
-        progress (min vs speed) ; Typically 80
-        distance-from-center (Math/abs d) ; Range 0-3
-        sideways-speed (Math/abs vd) ; Range 0-10
+        distance-from-center (Math/abs d)
         on-road (< distance-from-center 3.0)]
-    (+ (if on-road
-         progress ; Credit for speed if on road
-         -1000.0) ; Severe penalty if off road
-       (* -10.0 distance-from-center) ; Prefer center of road
-       (* -1.0 sideways-speed)))) ; Prefer no side-to-side wobbling
+    (+ 0.0 ; TODO: Increase result based on how quickly car is moving forward.
+       (if on-road
+         0.0  ; TODO: Choose bonus for staying on road
+         0.0) ; TODO: Subtract penalty for driving off the road
+       0.0    ; TODO: Subtract penalty for distance from center of road
+       0.0))) ; TODO: Choose at least one new metric for how well the car is doing.
 
+; Udacity requires 100 ms delay when submitting.
+; Feel free to experiment with other values until then.
 (def actuation-period-milliseconds 100)
 
 (defn controller
@@ -190,12 +215,13 @@
                 [(:steering-angle telemetry) (:throttle telemetry)]
                 coord
                 delay-seconds)
+        ; TODO: Choose depth - how many steps ahead figurer should explore.
         problem (figurer/define-problem {:policy policy
                                          :predict (fn [state actuation]
                                                     (predict state actuation coord delay-seconds))
                                          :value value
                                          :initial-state state
-                                         :depth 10})
+                                         :depth 1})
         solution (figurer/figure problem
                    {:max-seconds delay-seconds})
         plan (figurer/sample-plan solution)
