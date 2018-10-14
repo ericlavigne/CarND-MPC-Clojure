@@ -18,8 +18,7 @@ Compared to C++, Clojure has a much simpler and more flexible syntax, clear
 error handling, and sophisticated dependency management. Compared to Python, Clojure is
 much faster (close to C++) and has excellent concurrency support.
 
-Here's a [tutorial](https://clojure.org/guides/learn/syntax#_clojure_basics)
-and [interactive prompt](http://clojurescript.net/) to help you get started.
+Here's a [tutorial](https://www.maria.cloud/) to help you get started.
 
 ## Installation
 
@@ -29,9 +28,11 @@ a Clojure build tool. This is a fairly easy
 installation process. Just follow the instructions on the
 [Leiningen](https://leiningen.org/) website.
 
-I also recommend [NightCode](https://sekao.net/nightcode/) as your first Clojure text
-editor because it is very easy to install and use. Later, you can explore more advanced
-options like [Cursive (IntelliJ)](https://cursive-ide.com/),
+I also recommend [VS Code](https://code.visualstudio.com/) with the
+[Calva extension](https://marketplace.visualstudio.com/items?itemName=cospaia.clojure4vscode)
+as your first Clojure text editor because it is very easy to install
+and use. Later, you can explore more advanced options like
+[Cursive (IntelliJ)](https://cursive-ide.com/),
 [CIDER (Emacs)](https://github.com/clojure-emacs/cider),
 or [Vim](https://github.com/tpope/vim-fireplace).
 
